@@ -31,39 +31,76 @@
  * i.e. a path provided by the system APIs or constructed from folder names provided
  * by the directory enumeration APIs.
  *
- * You can check the installation result by reading FSEventsFix environment
- * variable. Possible values are:
- *
- * - (not set or empty string): not yet installed
- *
- * - "installed": successfully installed
- *
- * - "failed": installation or self-test failed
- *
- * - "unnecessary": the current version of OS X doesn't exhibit the bug (reserved for
- *   when Apple finally fixes the bug; not currently used)
- *
- * - "disabled": not used by the library, but if you set the variable to this value,
- *   the library will not be installed
- *
- * Please don't set FSEventsFix to any other values.
- *
  * See .c file for license & copyrights, but basically this is available under a mix
  * of MIT and BSD licenses.
  */
 
-#ifndef FSEventsFixEnvVarName
+#ifndef __FSEventsFix__
+#define __FSEventsFix__
 
-#define FSEventsFixVersion "0.9.0"
+#include <CoreFoundation/CoreFoundation.h>
 
-#define FSEventsFixEnvVarName "FSEventsFix"
-#define FSEventsFixEnvVarValueInstalled "installed"
-#define FSEventsFixEnvVarValueFailed "failed"
-#define FSEventsFixEnvVarValueUnnecessary "unnecessary"
-#define FSEventsFixEnvVarValueDisabled "disabled"
+/// A library version string (e.g. 1.2.3) for displaying and logging purposes
+extern const char *const FSEventsFixVersionString;
 
-void FSEventsFixInstall();
+/// See FSEventsFixDebugOptionSimulateBroken
+#define FSEventsFixSimulatedBrokenFolderMarker  "__!FSEventsBroken!__"
 
-int FSEventsFixIsBroken(const char *path);
+typedef CF_OPTIONS(unsigned, FSEventsFixDebugOptions) {
+    /// Always return an uppercase string from realpath
+    FSEventsFixDebugOptionUppercaseReturn  = 0x01,
+    
+    /// Log all calls to realpath using the logger configured via FSEventsFixConfigure
+    FSEventsFixDebugOptionLogCalls         = 0x02,
+
+    /// In addition to the logging block (if any), log everything to stderr
+    FSEventsFixDebugOptionLogT
+    oStderr      = 0x08,
+    
+    /// Report paths containing FSEventsFixSimulatedBrokenFolderMarker as broken
+    FSEventsFixDebugOptionSimulateBroken   = 0x10,
+    
+    /// Repair paths containing FSEventsFixSimulatedBrokenFolderMarker by renaming them
+    FSEventsFixDebugOptionSimulateRepair   = 0x20,
+};
+
+typedef CF_ENUM(int, FSEventsFixMessageType) {
+    /// Call logging requested via FSEventsFixDebugOptionLogCalls
+    FSEventsFixMessageTypeCall,
+    
+    /// Results of actions like repair, and other pretty verbose, but notable, stuff.
+    FSEventsFixMessageTypeResult,
+
+    /// Enabled/disabled status change
+    FSEventsFixMessageTypeStatusChange,
+
+    /// Expected failure (treat as a warning)
+    FSEventsFixMessageTypeExpectedFailure,
+
+    /// Severe failure that most likely means that the library won't work
+    FSEventsFixMessageTypeFatalError
+};
+
+typedef CF_ENUM(int, FSEventsFixRepairStatus) {
+    FSEventsFixRepairStatusNotBroken,
+    FSEventsFixRepairStatusRepaired,
+    FSEventsFixRepairStatusFailed,
+};
+
+/// Note that the logging block can be called on any dispatch queue.
+void FSEventsFixConfigure(FSEventsFixDebugOptions debugOptions, void(^loggingBlock)(FSEventsFixMessageType type, const char *message));
+
+void FSEventsFixEnable();
+void FSEventsFixDisable();
+
+bool FSEventsFixIsOperational();
+
+bool FSEventsFixIsBroken(const char *path);
+
+/// If the path is broken, returns a string identifying the root broken folder,
+/// otherwise, returns NULL. You need to free() the returned string.
+char *FSEventsFixCopyRootBrokenFolderPath(const char *path);
+
+FSEventsFixRepairStatus FSEventsFixRepairIfNeeded(const char *path);
 
 #endif
